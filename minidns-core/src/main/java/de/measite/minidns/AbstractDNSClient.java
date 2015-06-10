@@ -102,45 +102,6 @@ public abstract class AbstractDNSClient {
     }
 
     /**
-     * Query the system nameservers for a single entry of any class.
-     *
-     * This can be used to determine the name server version, if name
-     * is version.bind, type is TYPE.TXT and clazz is CLASS.CH.
-     *
-     * @param name The DNS name to request.
-     * @param type The DNS type to request (SRV, A, AAAA, ...).
-     * @param clazz The class of the request (usually IN for Internet).
-     * @return The response (or null on timeout/error).
-     */
-    public final DNSMessage query(String name, TYPE type, CLASS clazz)
-    {
-        Question q = new Question(name, type, clazz);
-        return query(q);
-    }
-
-    /**
-     * Query the system nameservers for a single entry of the class IN
-     * (which is used for MX, SRV, A, AAAA and most other RRs).
-     *
-     * @param name The DNS name to request.
-     * @param type The DNS type to request (SRV, A, AAAA, ...).
-     * @return The response (or null on timeout/error).
-     */
-    public final DNSMessage query(String name, TYPE type)
-    {
-        Question q = new Question(name, type, CLASS.IN);
-        return query(q);
-    }
-
-
-    /**
-     * Query the system DNS server for one entry.
-     * @param q The question section of the DNS query.
-     * @return The response (or null on timeout/error).
-     */
-    public abstract DNSMessage query(Question q);
-
-    /**
      * Query a specific server for one entry.
      * @param message The dns message send as query.
      * @param address The dns server address.
