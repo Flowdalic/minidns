@@ -142,13 +142,48 @@ public abstract class AbstractDNSClient {
 
     /**
      * Query a specific server for one entry.
+     * @param message The dns message send as query.
+     * @param address The dns server address.
+     * @param port the dns port.
+     * @return The response (or null on timeout/error).
+     * @throws IOException On IOErrors.
+     */
+    protected abstract DNSMessage query(DNSMessage message, InetAddress address, int port) throws IOException;
+
+    /**
+     * Query a specific server for one entry.
      * @param q The question section of the DNS query.
      * @param address The dns server address.
      * @param port the dns port.
      * @return The response (or null on timeout/error).
      * @throws IOException On IOErrors.
      */
-    public abstract DNSMessage query(Question q, InetAddress address, int port) throws IOException;
+    public DNSMessage query(Question q, InetAddress address, int port) throws IOException {
+        // See if we have the answer to this question already cached
+        DNSMessage result = (cache == null) ? null : cache.get(q);
+        if (result != null) {
+            return result;
+        }
+
+        DNSMessage request = new DNSMessage();
+        request.setQuestions(new Question[]{q});
+        request.setRecursionDesired(true);
+        request.setId(random.nextInt());
+
+        result = query(request, address, port);
+        if (result.getId() != request.getId()) {
+            return null;
+        }
+        for (Record record : result.getAnswers()) {
+            if (record.isAnswer(q)) {
+                if (cache != null) {
+                    cache.put(q, result);
+                }
+                break;
+            }
+        }
+        return result;
+    }
 
     /**
      * Query a nameserver for a single entry.

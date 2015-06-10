@@ -48,17 +48,7 @@ public class DNSClient extends AbstractDNSClient {
     }
 
     @Override
-    public DNSMessage query(Question q, InetAddress address, int port) throws IOException {
-        // See if we have the answer to this question already cached
-        DNSMessage dnsMessage = (cache == null) ? null : cache.get(q);
-        if (dnsMessage != null) {
-            return dnsMessage;
-        }
-
-        DNSMessage message = new DNSMessage();
-        message.setQuestions(new Question[]{q});
-        message.setRecursionDesired(true);
-        message.setId(random.nextInt());
+    protected DNSMessage query(DNSMessage message, InetAddress address, int port) throws IOException {
         byte[] buf = message.toArray();
 
         // TOOD Use a try-with-resource statement here once miniDNS minimum
@@ -72,19 +62,7 @@ public class DNSClient extends AbstractDNSClient {
             socket.send(packet);
             packet = new DatagramPacket(new byte[bufferSize], bufferSize);
             socket.receive(packet);
-            dnsMessage = new DNSMessage(packet.getData());
-            if (dnsMessage.getId() != message.getId()) {
-                return null;
-            }
-            for (Record record : dnsMessage.getAnswers()) {
-                if (record.isAnswer(q)) {
-                    if (cache != null) {
-                        cache.put(q, dnsMessage);
-                    }
-                    break;
-                }
-            }
-            return dnsMessage;
+            return new DNSMessage(packet.getData());
         } finally {
             if (socket != null) {
                 socket.close();
