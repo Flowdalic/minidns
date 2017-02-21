@@ -19,6 +19,7 @@ import de.measite.minidns.AbstractDNSClient;
 import de.measite.minidns.DNSCache;
 import de.measite.minidns.DNSClient;
 import de.measite.minidns.DNSMessage;
+import de.measite.minidns.MiniDNSException;
 import de.measite.minidns.Question;
 import de.measite.minidns.source.DNSDataSource;
 import de.measite.minidns.util.MultipleIoException;
@@ -132,6 +133,8 @@ public class ReliableDNSClient extends AbstractDNSClient {
 
         if (dnsMessage == null) {
             MultipleIoException.throwIfRequired(ioExceptions);
+
+            throw new MiniDNSException.NullResultException(q.build());
         }
 
         return dnsMessage;

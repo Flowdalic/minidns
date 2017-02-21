@@ -197,8 +197,8 @@ public class DNSClient extends AbstractDNSClient {
             }
         }
         MultipleIoException.throwIfRequired(ioExceptions);
-        // TODO assert that we never return null here.
-        return null;
+
+        throw new MiniDNSException.NullResultException(q);
     }
 
     /**

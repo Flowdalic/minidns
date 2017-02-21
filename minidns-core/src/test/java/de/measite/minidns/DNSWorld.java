@@ -12,6 +12,7 @@ package de.measite.minidns;
 
 import de.measite.minidns.DNSSECConstants.DigestAlgorithm;
 import de.measite.minidns.DNSSECConstants.SignatureAlgorithm;
+import de.measite.minidns.MiniDNSException.NullResultException;
 import de.measite.minidns.Record.CLASS;
 import de.measite.minidns.Record.TYPE;
 import de.measite.minidns.record.A;
@@ -46,7 +47,7 @@ public class DNSWorld extends DNSDataSource {
     private List<PreparedResponse> answers = new ArrayList<>();
 
     @Override
-    public DNSMessage query(DNSMessage message, InetAddress address, int port) {
+    public DNSMessage query(DNSMessage message, InetAddress address, int port) throws NullResultException {
         assertNotNull(message);
         assertNotNull(address);
         assertEquals(53, port);
@@ -59,9 +60,8 @@ public class DNSWorld extends DNSDataSource {
                 return response.build();
             }
         }
-        // TODO We should return an error or throw an IOException here. Otherwise the (DNSSEC) unit tests will log a
-        // bunch of server "NULL response from..." messages.
-        return null;
+
+        throw new MiniDNSException.NullResultException(message);
     }
 
     public void addPreparedResponse(PreparedResponse answer) {

@@ -14,6 +14,7 @@ import de.measite.minidns.AbstractDNSClient;
 import de.measite.minidns.DNSCache;
 import de.measite.minidns.DNSMessage;
 import de.measite.minidns.DNSName;
+import de.measite.minidns.MiniDNSException;
 import de.measite.minidns.Question;
 import de.measite.minidns.Record;
 import de.measite.minidns.Record.TYPE;
@@ -230,7 +231,8 @@ public class IterativeDNSClient extends AbstractDNSClient {
         }
 
         MultipleIoException.throwIfRequired(ioExceptions);
-        return null;
+
+        throw new MiniDNSException.NullResultException(q);
     }
 
     private DNSMessage queryRecursive(ResolutionState resolutionState, DNSMessage q, InetAddress address, DNSName authoritativeZone) throws IOException {

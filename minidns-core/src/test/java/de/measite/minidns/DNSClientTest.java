@@ -32,8 +32,8 @@ import static de.measite.minidns.DNSWorld.record;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class DNSClientTest {
 
@@ -81,10 +81,19 @@ public class DNSClientTest {
         assertEquals(1, response.answerSection.size());
         assertEquals(TYPE.A, response.answerSection.get(0).type);
         assertArrayEquals(new byte[]{127, 0, 0, 1}, ((A) response.answerSection.get(0).payloadData).getIp());
-        response = client.query("www2.example.com", TYPE.A);
-        assertNull(response);
-        response = client.query("www.example.com", TYPE.CNAME);
-        assertNull(response);
+        try {
+            response = client.query("www2.example.com", TYPE.A);
+            fail("Should never receive " + response);
+        } catch (IOException e) {
+            // Expected exception.
+        }
+
+        try {
+            response = client.query("www.example.com", TYPE.CNAME);
+            fail("Should never receive " + response);
+        } catch (IOException e) {
+            // Expected exception.
+        }
     }
 
     @Test
@@ -101,8 +110,12 @@ public class DNSClientTest {
         DNSClient client = new DNSClient(new LRUCache(0));
         NullSource source = new NullSource();
         client.setDataSource(source);
-        DNSMessage message = client.query("www.example.com", TYPE.A);
-        assertNull(message);
+        try {
+            DNSMessage message = client.query("www.example.com", TYPE.A);
+            fail("Should never receive " + message);
+        } catch (MiniDNSException.NullResultException e) {
+            // Expected exception.
+        }
         assertTrue(source.queried);
     }
 }
