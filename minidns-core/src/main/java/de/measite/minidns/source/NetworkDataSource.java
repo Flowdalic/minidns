@@ -12,6 +12,8 @@ package de.measite.minidns.source;
 
 import de.measite.minidns.DNSMessage;
 import de.measite.minidns.MiniDNSException;
+import de.measite.minidns.MiniDnsFuture;
+import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
 import de.measite.minidns.util.MultipleIoException;
 
 import java.io.DataInputStream;

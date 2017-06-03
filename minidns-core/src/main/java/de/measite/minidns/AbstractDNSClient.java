@@ -10,6 +10,7 @@
  */
 package de.measite.minidns;
 
+import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
 import de.measite.minidns.Record.CLASS;
 import de.measite.minidns.Record.TYPE;
 import de.measite.minidns.cache.LRUCache;
@@ -177,6 +178,29 @@ public abstract class AbstractDNSClient {
      */
     protected abstract DNSMessage query(DNSMessage.Builder query) throws IOException;
 
+    public final MiniDnsFuture<DNSMessage, IOException> queryAsync(CharSequence name, TYPE type) {
+        Question q = new Question(name, type, CLASS.IN);
+        return queryAsync(q);
+    }
+
+    public final MiniDnsFuture<DNSMessage, IOException> queryAsync(Question q) {
+        DNSMessage.Builder query = buildMessage(q);
+        return queryAsync(query);
+    }
+
+    protected MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage.Builder query) {
+        InternalMiniDnsFuture<DNSMessage, IOException> future = new InternalMiniDnsFuture<>();
+        DNSMessage result;
+        try {
+            result = query(query);
+        } catch (IOException e) {
+            future.setException(e);
+            return future;
+        }
+        future.setResult(result);
+        return future;
+    }
+
     public final DNSMessage query(Question q, InetAddress server, int port) throws IOException {
         DNSMessage query = getQueryFor(q);
         return query(query, server, port);
@@ -213,6 +237,21 @@ public abstract class AbstractDNSClient {
             cache.put(requestMessage.asNormalizedVersion(), responseMessage);
         }
         return responseMessage;
+    }
+
+    public final MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage requestMessage, InetAddress address, int port) {
+        // See if we have the answer to this question already cached
+        DNSMessage responseMessage = (cache == null) ? null : cache.get(requestMessage);
+        if (responseMessage != null) {
+            return MiniDnsFuture.from(responseMessage);
+        }
+
+        final Question q = requestMessage.getQuestion();
+
+        final Level TRACE_LOG_LEVEL = Level.FINE;
+        LOGGER.log(TRACE_LOG_LEVEL, "Asynchronusly asking {0} on {1} for {2} with:\n{3}", new Object[] { address, port, q, requestMessage });
+
+        return dataSource.queryAsync(requestMessage, address, port);
     }
 
     /**
@@ -294,6 +333,10 @@ public abstract class AbstractDNSClient {
      */
     public DNSMessage query(Question q, InetAddress address) throws IOException {
         return query(q, address, 53);
+    }
+
+    public final MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage query, InetAddress dnsServer) {
+        return queryAsync(query, dnsServer, 53);
     }
 
     /**

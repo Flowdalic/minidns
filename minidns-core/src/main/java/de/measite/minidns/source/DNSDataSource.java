@@ -11,12 +11,28 @@
 package de.measite.minidns.source;
 
 import de.measite.minidns.DNSMessage;
+import de.measite.minidns.MiniDnsFuture;
+import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
 
 import java.io.IOException;
 import java.net.InetAddress;
 
 public abstract class DNSDataSource {
+
     public abstract DNSMessage query(DNSMessage message, InetAddress address, int port) throws IOException;
+
+    public MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage message, InetAddress address, int port) {
+        InternalMiniDnsFuture<DNSMessage, IOException> future = new InternalMiniDnsFuture<>();
+        DNSMessage result;
+        try {
+            result = query(message, address, port);
+        } catch (IOException e) {
+            future.setException(e);
+            return future;
+        }
+        future.setResult(result);
+        return future;
+    }
 
     protected int udpPayloadSize = 1024;
 
