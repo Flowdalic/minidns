@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
@@ -110,10 +111,15 @@ public class AsyncNetworkDataSource extends DNSDataSource {
         return channel.register(SELECTOR, ops, attachment);
     }
 
-    void cancelled(AsyncDnsRequest asyncDnsRequest) {
+    void finished(AsyncDnsRequest asyncDnsRequest){
         synchronized (DEADLINE_QUEUE) {
             DEADLINE_QUEUE.remove(asyncDnsRequest);
         }
+    }
+
+    void cancelled(AsyncDnsRequest asyncDnsRequest) {
+        finished(asyncDnsRequest);
+        // Wakeup since the async DNS request was removed from the deadline queue.
         SELECTOR.wakeup();
     }
 
@@ -127,8 +133,6 @@ public class AsyncNetworkDataSource extends DNSDataSource {
                 handlePendingSelectionKeys();
 
                 handleIncomingRequests();
-
-                handleDeadlineQueue();
             }
         }
 
@@ -143,7 +147,14 @@ public class AsyncNetworkDataSource extends DNSDataSource {
         private static Collection<SelectionKey> performSelect() {
             long selectWait;
             synchronized (DEADLINE_QUEUE) {
-                AsyncDnsRequest nearestDeadline = DEADLINE_QUEUE.peek();
+                AsyncDnsRequest nearestDeadline;
+                while ((nearestDeadline = DEADLINE_QUEUE.peek()) != null) {
+                    if (!nearestDeadline.wasDeadlineMissedAndFutureNotified()) {
+                        // This is the nearest deadline.
+                        break;
+                    }
+                    DEADLINE_QUEUE.poll();
+                }
                 if (nearestDeadline == null) {
                     selectWait = 0;
                 } else {
@@ -173,13 +184,13 @@ public class AsyncNetworkDataSource extends DNSDataSource {
                 Iterator<SelectionKey> it = selectedKeys.iterator();
                 for (int i = 0; i < myKeyCount; i++) {
                     SelectionKey selectionKey = it.next();
-                    selectionKey.cancel();
+                    selectionKey.interestOps(0);
                     mySelectedKeys.add(selectionKey);
                 }
                 while (it.hasNext()) {
                     // Drain to PENDING_SELECTION_KEYS
                     SelectionKey selectionKey = it.next();
-                    selectionKey.cancel();
+                    selectionKey.interestOps(0);
                     PENDING_SELECTION_KEYS.add(selectionKey);
                 }
                 return mySelectedKeys;
@@ -236,16 +247,6 @@ public class AsyncNetworkDataSource extends DNSDataSource {
             }
         }
 
-        private static void handleDeadlineQueue() {
-            synchronized (DEADLINE_QUEUE) {
-                AsyncDnsRequest nearestDeadline;
-                while ((nearestDeadline = DEADLINE_QUEUE.peek()) != null) {
-                    if (!nearestDeadline.wasDeadlineMissedAndFutureNotified()) {
-                        return;
-                    }
-                }
-            }
-        }
     }
 
 }

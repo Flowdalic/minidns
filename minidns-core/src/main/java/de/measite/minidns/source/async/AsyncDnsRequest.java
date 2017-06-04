@@ -96,7 +96,7 @@ public class AsyncDnsRequest {
     }
 
     private final void gotResult(DNSMessage result) {
-        // TODO Add caching here?
+        asyncNds.finished(this);
         future.setResult(result);
     }
 
@@ -120,6 +120,10 @@ public class AsyncDnsRequest {
     private void abortUdpRequestAndCleanup(DatagramChannel datagramChannel, String errorMessage, IOException exception) {
         LOGGER.log(Level.SEVERE, errorMessage, exception);
         addException(exception);
+
+        if (selectionKey != null) {
+            selectionKey.cancel();
+        }
 
         try {
             datagramChannel.close();
@@ -154,40 +158,17 @@ public class AsyncDnsRequest {
         }
 
         try {
-            registerWithSelector(datagramChannel, SelectionKey.OP_CONNECT, new UdpConnectedChannelSelectedHandler(future));
-        } catch (ClosedChannelException e) {
-            abortUdpRequestAndCleanup(datagramChannel, "Exception registering datagram channel for OP_CONNECT", e);
-            return;
-        }
-
-        try {
             datagramChannel.connect(socketAddress);
         } catch (IOException e) {
             abortUdpRequestAndCleanup(datagramChannel, "Exception connecting datagram channel", e);
             return;
         }
-    }
 
-    class UdpConnectedChannelSelectedHandler extends ChannelSelectedHandler {
-
-        UdpConnectedChannelSelectedHandler(Future<?> future) {
-            super(future);
-        }
-
-        @Override
-        protected void handleChannelSelectedAndNotCancelled(SelectableChannel channel, SelectionKey selectionKey) {
-            DatagramChannel datagramChannel = (DatagramChannel) channel;
-
-            if (!datagramChannel.isConnected()) {
-                throw new AssertionError();
-            }
-
-            try {
-                registerWithSelector(datagramChannel, SelectionKey.OP_WRITE, new UdpWritableChannelSelectedHandler(future));
-            } catch (ClosedChannelException e) {
-                abortUdpRequestAndCleanup(datagramChannel, "Exception registering datagram channel for OP_WRITE", e);
-                return;
-            }
+        try {
+            registerWithSelector(datagramChannel, SelectionKey.OP_WRITE, new UdpWritableChannelSelectedHandler(future));
+        } catch (ClosedChannelException e) {
+            abortUdpRequestAndCleanup(datagramChannel, "Exception registering datagram channel for OP_WRITE", e);
+            return;
         }
     }
 
@@ -248,6 +229,7 @@ public class AsyncDnsRequest {
                 return;
             }
 
+            selectionKey.cancel();
             try {
                 datagramChannel.close();
             } catch (IOException e) {
@@ -281,6 +263,10 @@ public class AsyncDnsRequest {
     private void abortTcpRequestAndCleanup(SocketChannel socketChannel, String errorMessage, IOException exception) {
         LOGGER.log(Level.SEVERE, errorMessage, exception);
         addException(exception);
+
+        if (selectionKey != null) {
+            selectionKey.cancel();
+        }
 
         if (socketChannel != null && socketChannel.isOpen()) {
             try {
@@ -449,6 +435,7 @@ public class AsyncDnsRequest {
                 return;
             }
 
+            selectionKey.cancel();
             try {
                 socketChannel.close();
             } catch (IOException e) {

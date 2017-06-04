@@ -236,13 +236,12 @@ public class DNSClient extends AbstractDNSClient {
             }
 
             MiniDnsFuture<DNSMessage, IOException> f = queryAsync(q, dns);
-            f.onSuccess(new SuccessCallback<DNSMessage>() {
+            f.onSuccessOrError(new SuccessCallback<DNSMessage>() {
                 @Override
                 public void onSuccess(DNSMessage result) {
                     future.setResult(result);
                 }
-            });
-            f.onError(new ExceptionCallback<IOException>() {
+            }, new ExceptionCallback<IOException>() {
                 @Override
                 public void processException(IOException exception) {
                     exceptions.add(exception);

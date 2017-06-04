@@ -474,10 +474,8 @@ public class DNSMessage {
     }
 
     public ByteBuffer getInByteBuffer() {
-        byte[] bytes = serialize();
-        ByteBuffer byteBuffer = ByteBuffer.allocate(bytes.length);
-        byteBuffer.put(bytes);
-        return byteBuffer;
+        byte[] bytes = serialize().clone();
+        return ByteBuffer.wrap(bytes);
     }
 
     private byte[] byteCache;
