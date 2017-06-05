@@ -10,6 +10,7 @@
  */
 package de.measite.minidns.source;
 
+import de.measite.minidns.DNSCache;
 import de.measite.minidns.DNSMessage;
 import de.measite.minidns.MiniDnsFuture;
 import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
@@ -72,5 +73,35 @@ public abstract class DNSDataSource {
             throw new IllegalArgumentException("UDP payload size must be greater than zero");
         }
         this.udpPayloadSize = udpPayloadSize;
+    }
+ 
+    private DNSCache cache;
+
+    protected final void cacheResult(DNSMessage request, DNSMessage response) {
+        final DNSCache activeCache = cache;
+        if (activeCache == null) {
+            return;
+        }
+        activeCache.put(request, response);
+    }
+
+    public enum QueryMode {
+        dontCare,
+        udpTcp,
+        tcp,
+        ;
+    }
+ 
+    private QueryMode queryMode = QueryMode.dontCare;
+
+    public void setQueryMode(QueryMode queryMode) {
+        if (queryMode == null) {
+            throw new IllegalArgumentException();
+        }
+        this.queryMode = queryMode;
+    }
+
+    public QueryMode getQueryMode() {
+        return queryMode;
     }
 }

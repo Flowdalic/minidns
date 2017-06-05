@@ -1,9 +1,6 @@
 package de.measite.minidns.source.async;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -23,6 +20,7 @@ import de.measite.minidns.DNSMessage;
 import de.measite.minidns.MiniDNSException;
 import de.measite.minidns.MiniDnsFuture;
 import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
+import de.measite.minidns.source.DNSDataSource.QueryMode;
 import de.measite.minidns.util.MultipleIoException;
 
 public class AsyncDnsRequest {
@@ -46,6 +44,8 @@ public class AsyncDnsRequest {
 
     private final AsyncNetworkDataSource asyncNds;
 
+    private final boolean skipUdp;
+ 
     private ByteBuffer writeBuffer;
 
     private List<IOException> exceptions;
@@ -59,6 +59,19 @@ public class AsyncDnsRequest {
         this.udpPayloadSize = udpPayloadSize;
         this.asyncNds = asyncNds;
 
+        final QueryMode queryMode = asyncNds.getQueryMode();
+        switch (queryMode) {
+        case dontCare:
+        case udpTcp:
+            skipUdp = false;
+            break;
+        case tcp:
+            skipUdp = true;
+            break;
+        default:
+            throw new IllegalStateException("Unsupported query mode: " + queryMode);
+
+        }
         deadline = System.currentTimeMillis() + asyncNds.getTimeout();
         socketAddress = new InetSocketAddress(inetAddress, port);
     }
@@ -114,7 +127,11 @@ public class AsyncDnsRequest {
     }
 
     void startHandling() {
-        startUdpRequest();
+        if (!skipUdp) {
+            startUdpRequest();
+        } else {
+            startTcpRequest();
+        }
     }
 
     private void abortUdpRequestAndCleanup(DatagramChannel datagramChannel, String errorMessage, IOException exception) {
@@ -261,6 +278,9 @@ public class AsyncDnsRequest {
     }
 
     private void abortTcpRequestAndCleanup(SocketChannel socketChannel, String errorMessage, IOException exception) {
+        if (exception == null) {
+            exception = new IOException(errorMessage);
+        }
         LOGGER.log(Level.SEVERE, errorMessage, exception);
         addException(exception);
 
@@ -347,20 +367,37 @@ public class AsyncDnsRequest {
             super(future);
         }
 
+        /**
+         * ByteBuffer array of length 2. First buffer is for the length of the DNS message, second one is the actual DNS message.
+         */
+        private ByteBuffer[] writeBuffers;
+
         @Override
         public void handleChannelSelectedAndNotCancelled(SelectableChannel channel, SelectionKey selectionKey) {
             SocketChannel socketChannel = (SocketChannel) channel;
 
-            ensureWriteBufferIsInitialized();
+            if (writeBuffers == null) {
+                ensureWriteBufferIsInitialized();
+
+                ByteBuffer messageLengthByteBuffer = ByteBuffer.allocate(2);
+                int messageLength = writeBuffer.capacity();
+                assert messageLength <= Short.MAX_VALUE;
+                messageLengthByteBuffer.putShort((short) (messageLength & 0xffff));
+                messageLengthByteBuffer.rewind();
+
+                writeBuffers = new ByteBuffer[2];
+                writeBuffers[0] = messageLengthByteBuffer;
+                writeBuffers[1] = writeBuffer;
+            }
 
             try {
-                socketChannel.write(writeBuffer);
+                socketChannel.write(writeBuffers);
             } catch (IOException e) {
                 abortTcpRequestAndCleanup(socketChannel, "Exception writing to socket channel", e);
                 return;
             }
 
-            if (writeBuffer.hasRemaining()) {
+            if (moreToWrite()) {
                 try {
                     registerWithSelector(socketChannel, SelectionKey.OP_WRITE, this);
                 } catch (ClosedChannelException e) {
@@ -377,6 +414,14 @@ public class AsyncDnsRequest {
             }
         }
 
+        private boolean moreToWrite() {
+            for (int i = 0; i < writeBuffers.length; i++) {
+                if (writeBuffers[i].hasRemaining()) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     class TcpReadableChannelSelectedHandler extends ChannelSelectedHandler {
@@ -393,11 +438,17 @@ public class AsyncDnsRequest {
         public void handleChannelSelectedAndNotCancelled(SelectableChannel channel, SelectionKey selectionKey) {
             SocketChannel socketChannel = (SocketChannel) channel;
 
+            int bytesRead;
             if (byteBuffer == null) {
                 try {
-                    socketChannel.read(messageLengthByteBuffer);
+                    bytesRead = socketChannel.read(messageLengthByteBuffer);
                 } catch (IOException e) {
                     abortTcpRequestAndCleanup(socketChannel, "Exception reading from socket channel", e);
+                    return;
+                }
+
+                if (bytesRead < 0) {
+                    abortTcpRequestAndCleanup(socketChannel, "Socket closed by remote host " + socketAddress, null);
                     return;
                 }
 
@@ -409,21 +460,22 @@ public class AsyncDnsRequest {
                     }
                     return;
                 }
-                InputStream is = new ByteArrayInputStream(messageLengthByteBuffer.array());
-                DataInputStream dis = new DataInputStream(is);
-                int messageLength;
-                try {
-                    messageLength = dis.readUnsignedShort();
-                } catch (IOException e) {
-                    throw new Error(e);
-                }
+
+                messageLengthByteBuffer.rewind();
+                short messageLengthSignedShort = messageLengthByteBuffer.getShort();
+                int messageLength = messageLengthSignedShort & 0xffff;
                 byteBuffer = ByteBuffer.allocate(messageLength);
             }
 
             try {
-                socketChannel.read(byteBuffer);
+                bytesRead = socketChannel.read(byteBuffer);
             } catch (IOException e) {
                 throw new Error(e);
+            }
+
+            if (bytesRead < 0) {
+                abortTcpRequestAndCleanup(socketChannel, "Socket closed by remote host " + socketAddress, null);
+                return;
             }
 
             if (byteBuffer.hasRemaining()) {

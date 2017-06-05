@@ -111,7 +111,7 @@ public class AsyncNetworkDataSource extends DNSDataSource {
         return channel.register(SELECTOR, ops, attachment);
     }
 
-    void finished(AsyncDnsRequest asyncDnsRequest){
+    void finished(AsyncDnsRequest asyncDnsRequest) {
         synchronized (DEADLINE_QUEUE) {
             DEADLINE_QUEUE.remove(asyncDnsRequest);
         }
@@ -153,6 +153,7 @@ public class AsyncNetworkDataSource extends DNSDataSource {
                         // This is the nearest deadline.
                         break;
                     }
+                    // Remove the async DNS request from the deadline queue, as it was just finished with an error.
                     DEADLINE_QUEUE.poll();
                 }
                 if (nearestDeadline == null) {
@@ -175,9 +176,9 @@ public class AsyncNetworkDataSource extends DNSDataSource {
                     LOGGER.log(Level.SEVERE, "IOException while using select()", e);
                     return Collections.emptyList();
                 }
-                if (numSelected <= 0) {
-                    return Collections.emptyList();
-                }
+//                if (numSelected <= 0) {
+//                    return Collections.emptyList();
+//                }
                 Set<SelectionKey> selectedKeys = SELECTOR.selectedKeys();
                 int myKeyCount = selectedKeys.size() / REACTOR_THREAD_COUNT;
                 Collection<SelectionKey> mySelectedKeys = new ArrayList<>(myKeyCount);

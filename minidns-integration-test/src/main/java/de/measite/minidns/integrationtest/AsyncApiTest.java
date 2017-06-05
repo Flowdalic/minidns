@@ -10,6 +10,7 @@ import de.measite.minidns.DNSMessage.RESPONSE_CODE;
 import de.measite.minidns.MiniDnsFuture;
 import de.measite.minidns.Record;
 import de.measite.minidns.source.DNSDataSource;
+import de.measite.minidns.source.DNSDataSource.QueryMode;
 import de.measite.minidns.source.async.AsyncNetworkDataSource;
 
 public class AsyncApiTest {
@@ -32,6 +33,7 @@ public class AsyncApiTest {
         DNSDataSource dataSource = new AsyncNetworkDataSource();
         dataSource.setTimeout(60 * 60 * 1000);
         dataSource.setUdpPayloadSize(256);
+        dataSource.setQueryMode(QueryMode.tcp);
 
         DNSClient client = new DNSClient();
         client.setDataSource(dataSource);
