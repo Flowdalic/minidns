@@ -21,14 +21,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,7 +42,7 @@ public class AsyncNetworkDataSource extends DNSDataSource {
     private static final Queue<AsyncDnsRequest> INCOMING_REQUESTS = new ConcurrentLinkedQueue<>();
 
     private static final Selector SELECTOR;
-    
+
     private static final Queue<SelectionKey> PENDING_SELECTION_KEYS = new ConcurrentLinkedQueue<>();
 
     private static final Thread[] REACTOR_THREADS = new Thread[REACTOR_THREAD_COUNT];
@@ -55,7 +52,7 @@ public class AsyncNetworkDataSource extends DNSDataSource {
         public int compare(AsyncDnsRequest o1, AsyncDnsRequest o2) {
             if (o1.deadline > o2.deadline) {
                 return 1;
-            } else if (o1.deadline < o2.deadline){
+            } else if (o1.deadline < o2.deadline) {
                 return -1;
             }
             return 0;
@@ -162,25 +159,31 @@ public class AsyncNetworkDataSource extends DNSDataSource {
                     selectWait = nearestDeadline.deadline - System.currentTimeMillis();
                 }
             }
-    
+
             if (selectWait < 0) {
                 // We already have a missed deadline.
                 return Collections.emptyList();
             }
 
             synchronized (SELECTOR) {
-                int numSelected;
+                int newSelectedKeysCount;
                 try {
-                    numSelected = SELECTOR.select(selectWait);
+                    newSelectedKeysCount = SELECTOR.select(selectWait);
                 } catch (IOException e) {
                     LOGGER.log(Level.SEVERE, "IOException while using select()", e);
                     return Collections.emptyList();
                 }
-//                if (numSelected <= 0) {
-//                    return Collections.emptyList();
-//                }
+
                 Set<SelectionKey> selectedKeys = SELECTOR.selectedKeys();
-                int myKeyCount = selectedKeys.size() / REACTOR_THREAD_COUNT;
+                int selectedKeysCount = selectedKeys.size();
+
+                final Level LOG_LEVEL = Level.FINER;
+                if (LOGGER.isLoggable(LOG_LEVEL)) {
+                    LOGGER.log(LOG_LEVEL,
+                            "New selected key count: " + newSelectedKeysCount + ". Total selected key count " + selectedKeysCount);
+                }
+
+                int myKeyCount = selectedKeysCount / REACTOR_THREAD_COUNT;
                 Collection<SelectionKey> mySelectedKeys = new ArrayList<>(myKeyCount);
                 Iterator<SelectionKey> it = selectedKeys.iterator();
                 for (int i = 0; i < myKeyCount; i++) {

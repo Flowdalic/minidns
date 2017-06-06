@@ -74,7 +74,7 @@ public abstract class DNSDataSource {
         }
         this.udpPayloadSize = udpPayloadSize;
     }
- 
+
     private DNSCache cache;
 
     protected final void cacheResult(DNSMessage request, DNSMessage response) {
