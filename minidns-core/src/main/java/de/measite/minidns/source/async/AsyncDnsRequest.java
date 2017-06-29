@@ -30,6 +30,7 @@ import de.measite.minidns.DNSMessage;
 import de.measite.minidns.MiniDNSException;
 import de.measite.minidns.MiniDnsFuture;
 import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
+import de.measite.minidns.source.DNSDataSource.OnResponseCallback;
 import de.measite.minidns.source.DNSDataSource.QueryMode;
 import de.measite.minidns.util.MultipleIoException;
 
@@ -54,6 +55,8 @@ public class AsyncDnsRequest {
 
     private final AsyncNetworkDataSource asyncNds;
 
+    private final OnResponseCallback onResponseCallback;
+
     private final boolean skipUdp;
 
     private ByteBuffer writeBuffer;
@@ -64,10 +67,21 @@ public class AsyncDnsRequest {
 
     final long deadline;
 
-    AsyncDnsRequest(DNSMessage request, InetAddress inetAddress, int port, int udpPayloadSize, AsyncNetworkDataSource asyncNds) {
+    /**
+     * Creates a new AsyncDnsRequest instance.
+     *
+     * @param request the DNS message of the request.
+     * @param inetAddress The IP address of the DNS server to ask.
+     * @param port The port of the DNS server to ask.
+     * @param udpPayloadSize The configured UDP payload size.
+     * @param asyncNds A reference to the {@link AsyncNetworkDataSource} instance manageing the requests.
+     * @param onResponseCallback the optional callback when a response was received.
+     */
+    AsyncDnsRequest(DNSMessage request, InetAddress inetAddress, int port, int udpPayloadSize, AsyncNetworkDataSource asyncNds, OnResponseCallback onResponseCallback) {
         this.request = request;
         this.udpPayloadSize = udpPayloadSize;
         this.asyncNds = asyncNds;
+        this.onResponseCallback = onResponseCallback;
 
         final QueryMode queryMode = asyncNds.getQueryMode();
         switch (queryMode) {
@@ -119,6 +133,9 @@ public class AsyncDnsRequest {
     }
 
     private final void gotResult(DNSMessage result) {
+        if (onResponseCallback != null) {
+            onResponseCallback.onResponse(request, result);
+        }
         asyncNds.finished(this);
         future.setResult(result);
     }

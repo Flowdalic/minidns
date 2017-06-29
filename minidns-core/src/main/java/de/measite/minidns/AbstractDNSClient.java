@@ -42,6 +42,16 @@ public abstract class AbstractDNSClient {
 
     protected static final Logger LOGGER = Logger.getLogger(AbstractDNSClient.class.getName());
 
+    private final DNSDataSource.OnResponseCallback onResponseCallback = new DNSDataSource.OnResponseCallback() {
+        @Override
+        public void onResponse(DNSMessage requestMessage, DNSMessage responseMessage) {
+            final Question q = requestMessage.getQuestion();
+            if (cache != null && isResponseCacheable(q, responseMessage)) {
+                cache.put(requestMessage.asNormalizedVersion(), responseMessage);
+            }
+        }
+    };
+
     /**
      * The internal random class for sequence generation.
      */
@@ -233,9 +243,8 @@ public abstract class AbstractDNSClient {
 
         if (responseMessage == null) return null;
 
-        if (cache != null && isResponseCacheable(q, responseMessage)) {
-            cache.put(requestMessage.asNormalizedVersion(), responseMessage);
-        }
+        onResponseCallback.onResponse(requestMessage, responseMessage);
+
         return responseMessage;
     }
 
@@ -251,7 +260,7 @@ public abstract class AbstractDNSClient {
         final Level TRACE_LOG_LEVEL = Level.FINE;
         LOGGER.log(TRACE_LOG_LEVEL, "Asynchronusly asking {0} on {1} for {2} with:\n{3}", new Object[] { address, port, q, requestMessage });
 
-        return dataSource.queryAsync(requestMessage, address, port);
+        return dataSource.queryAsync(requestMessage, address, port, onResponseCallback);
     }
 
     /**

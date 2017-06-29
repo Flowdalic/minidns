@@ -76,8 +76,8 @@ public class AsyncNetworkDataSource extends DNSDataSource {
     }
 
     @Override
-    public MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage message, InetAddress address, int port) {
-        AsyncDnsRequest asyncDnsRequest = new AsyncDnsRequest(message, address, port, udpPayloadSize, this);
+    public MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage message, InetAddress address, int port, OnResponseCallback onResponseCallback) {
+        AsyncDnsRequest asyncDnsRequest = new AsyncDnsRequest(message, address, port, udpPayloadSize, this, onResponseCallback);
         INCOMING_REQUESTS.add(asyncDnsRequest);
         synchronized (DEADLINE_QUEUE) {
             DEADLINE_QUEUE.add(asyncDnsRequest);
@@ -88,7 +88,7 @@ public class AsyncNetworkDataSource extends DNSDataSource {
 
     @Override
     public DNSMessage query(DNSMessage message, InetAddress address, int port) throws IOException {
-        MiniDnsFuture<DNSMessage, IOException> future = queryAsync(message, address, port);
+        MiniDnsFuture<DNSMessage, IOException> future = queryAsync(message, address, port, null);
         try {
             return future.get();
         } catch (InterruptedException e) {

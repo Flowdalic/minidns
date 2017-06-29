@@ -208,6 +208,7 @@ public class DNSClient extends AbstractDNSClient {
             return MiniDnsFuture.from(responseMessage);
         }
 
+        // TODO: Use the list (currently only using a single item for testing purposes)
 //        final List<InetAddress> dnsServerAddresses = getServerAddresses().get(0);
         final List<InetAddress> dnsServerAddresses = Collections.singletonList(getServerAddresses().get(0));
 

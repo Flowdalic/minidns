@@ -22,7 +22,7 @@ public abstract class DNSDataSource {
 
     public abstract DNSMessage query(DNSMessage message, InetAddress address, int port) throws IOException;
 
-    public MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage message, InetAddress address, int port) {
+    public MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage message, InetAddress address, int port, OnResponseCallback onResponseCallback) {
         InternalMiniDnsFuture<DNSMessage, IOException> future = new InternalMiniDnsFuture<>();
         DNSMessage result;
         try {
@@ -103,5 +103,9 @@ public abstract class DNSDataSource {
 
     public QueryMode getQueryMode() {
         return queryMode;
+    }
+
+    public interface OnResponseCallback {
+        void onResponse(DNSMessage request, DNSMessage response);
     }
 }
