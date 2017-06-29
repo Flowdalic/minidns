@@ -91,7 +91,7 @@ public abstract class DNSDataSource {
         tcp,
         ;
     }
- 
+
     private QueryMode queryMode = QueryMode.dontCare;
 
     public void setQueryMode(QueryMode queryMode) {

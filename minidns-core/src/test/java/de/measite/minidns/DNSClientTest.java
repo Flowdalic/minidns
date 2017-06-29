@@ -10,7 +10,6 @@
  */
 package de.measite.minidns;
 
-import de.measite.minidns.MiniDnsFuture.InternalMiniDnsFuture;
 import de.measite.minidns.Record.TYPE;
 import de.measite.minidns.cache.LRUCache;
 import de.measite.minidns.dnsserverlookup.AbstractDNSServerLookupMechanism;
