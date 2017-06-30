@@ -86,10 +86,20 @@ public abstract class DNSDataSource {
     }
 
     public enum QueryMode {
+        /**
+         * Perform the query mode that is assumed "best" for that particular case.
+         */
         dontCare,
+
+        /**
+         * Try UDP first, and if the result is bigger than the maximum UDP payload size, or if something else goes wrong, fallback to TCP.
+         */
         udpTcp,
+
+        /**
+         * Always use only TCP when querying DNS servers.
+         */
         tcp,
-        ;
     }
 
     private QueryMode queryMode = QueryMode.dontCare;

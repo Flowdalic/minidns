@@ -42,6 +42,10 @@ public abstract class AbstractDNSClient {
 
     protected static final Logger LOGGER = Logger.getLogger(AbstractDNSClient.class.getName());
 
+    /**
+     * This callback is used by the synchronous query() method <b>and</b> by the asynchronous queryAync() method in order to update the
+     * cache. In the asynchronous case, hand this callback into the async call, so that it can get called once the result is available.
+     */
     private final DNSDataSource.OnResponseCallback onResponseCallback = new DNSDataSource.OnResponseCallback() {
         @Override
         public void onResponse(DNSMessage requestMessage, DNSMessage responseMessage) {
@@ -198,6 +202,15 @@ public abstract class AbstractDNSClient {
         return queryAsync(query);
     }
 
+    /**
+     * Default implementation of an asynchronous DNS query which just wraps the synchronous case.
+     * <p>
+     * Subclasses override this method to support true asynchronous queries.
+     * </p>
+     *
+     * @param query the query.
+     * @return a future for this query.
+     */
     protected MiniDnsFuture<DNSMessage, IOException> queryAsync(DNSMessage.Builder query) {
         InternalMiniDnsFuture<DNSMessage, IOException> future = new InternalMiniDnsFuture<>();
         DNSMessage result;

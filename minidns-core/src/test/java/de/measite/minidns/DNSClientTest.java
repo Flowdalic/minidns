@@ -97,7 +97,6 @@ public class DNSClientTest {
                 queried = true;
                 return null;
             }
-
         }
         DNSClient client = new DNSClient(new LRUCache(0));
         NullSource source = new NullSource();
