@@ -18,6 +18,8 @@ import org.minidns.dnsserverlookup.AndroidUsingExec;
 import org.minidns.dnsserverlookup.AndroidUsingReflection;
 import org.minidns.dnsserverlookup.DnsServerLookupMechanism;
 import org.minidns.dnsserverlookup.UnixUsingEtcResolvConf;
+import org.minidns.record.CNAME;
+import org.minidns.record.Record;
 import org.minidns.util.CollectionsUtil;
 import org.minidns.util.InetAddressUtil;
 import org.minidns.util.MultipleIoException;
@@ -173,6 +175,10 @@ public class DnsClient extends AbstractDnsClient {
 
             switch (responseMessage.responseCode) {
             case NO_ERROR:
+                Record<CNAME> cname = responseMessage.maybeGetCnameAnswerFor(q.getQuestion());
+                if (cname != null) {
+                    // TODO: if is CNAME *and* if CNAME chain not fully resolved, then begin chasing.
+                }
             case NX_DOMAIN:
                 break;
             default:
@@ -226,8 +232,32 @@ public class DnsClient extends AbstractDnsClient {
 
         List<MiniDnsFuture<DnsQueryResult, IOException>> futures = new ArrayList<>(dnsServerAddresses.size());
         // "Main" loop.
-        for (InetAddress dns : dnsServerAddresses) {
-            MiniDnsFuture<DnsQueryResult, IOException> f = queryAsync(q, dns);
+        for (final InetAddress forwardDnsServer : dnsServerAddresses) {
+            if (future.isDone()) {
+                for (MiniDnsFuture<DnsQueryResult, IOException> futureToCancel : futures) {
+                    futureToCancel.cancel(true);
+                }
+                break;
+            }
+
+            MiniDnsFuture<DnsQueryResult, IOException> f = queryAsync(q, forwardDnsServer);
+            f.onSuccess(new SuccessCallback<DnsQueryResult>() {
+                @Override
+                public void onSuccess(DnsQueryResult result) {
+                    // TODO: CNAME chasing.
+                    forwardDnsServer.toString();
+                    future.setResult(result);
+                }
+            });
+            f.onError(new ExceptionCallback<IOException>() {
+                @Override
+                public void processException(IOException exception) {
+                    exceptions.add(exception);
+                    if (exceptions.size() == dnsServerAddresses.size()) {
+                        future.setException(MultipleIoException.toIOException(exceptions));
+                    }
+                }
+            });
             futures.add(f);
         }
 

@@ -204,6 +204,8 @@ public class IterativeDnsClient extends AbstractDnsClient {
 
         DnsMessage resMessage = dnsQueryResult.response;
         if (resMessage.authoritativeAnswer) {
+            Record<CNAME> cname = resMessage.maybeGetCnameAnswerFor(q.getQuestion());
+            // TODO: Check if CNAME, if so, then chase.
             return dnsQueryResult;
         }
 

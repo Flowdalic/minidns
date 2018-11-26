@@ -625,4 +625,14 @@ public final class Record<D extends Data> {
         filter(result, dataClass, input);
         return result;
     }
+
+    public static List<Record<? extends Data>> filter(DnsName dnsName, Collection<Record<? extends Data>> input) {
+        List<Record<? extends Data>> result = new ArrayList<>(input.size());
+        for (Record<? extends Data> record : input) {
+            if (record.name.equals(dnsName)) {
+                result.add(record);
+            }
+        }
+        return result;
+    }
 }

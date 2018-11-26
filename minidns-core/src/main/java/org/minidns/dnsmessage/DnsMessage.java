@@ -10,7 +10,9 @@
  */
 package org.minidns.dnsmessage;
 
+import org.minidns.dnsname.DnsName;
 import org.minidns.edns.Edns;
+import org.minidns.record.CNAME;
 import org.minidns.record.Data;
 import org.minidns.record.OPT;
 import org.minidns.record.Record;
@@ -50,6 +52,8 @@ import java.util.logging.Logger;
 public class DnsMessage {
 
     private static final Logger LOGGER = Logger.getLogger(DnsMessage.class.getName());
+
+    public static boolean VALIDATE = true;
 
     /**
      * Possible DNS response codes.
@@ -377,7 +381,14 @@ public class DnsMessage {
             }
         }
 
-        // TODO Add verification of dns message state here
+        if (!VALIDATE) {
+            return;
+        }
+
+        List<DnsMessageInvalidReason> invalidReasons = validate();
+        if (!invalidReasons.isEmpty()) {
+            throw new IllegalArgumentException("DnsMessage " + this + " is invalid because " + invalidReasons);
+        }
     }
 
     /**
@@ -758,6 +769,21 @@ public class DnsMessage {
             }
         }
         return res;
+    }
+
+    public Record<CNAME> maybeGetCnameAnswerFor(Question q) {
+        if (responseCode != RESPONSE_CODE.NO_ERROR) return null;
+
+        for (Record<? extends Data> answer : answerSection) {
+            Record<CNAME> cnameAnswer = answer.ifPossibleAs(CNAME.class);
+            if (cnameAnswer == null) continue;
+
+            if (cnameAnswer.name.equals(q.name) && cnameAnswer.clazz.equals(q.clazz)) {
+                return cnameAnswer;
+            }
+        }
+
+        return null;
     }
 
     private long answersMinTtlCache = -1;
@@ -1276,4 +1302,49 @@ public class DnsMessage {
         }
     }
 
+    private transient List<DnsMessageInvalidReason> validationResultCache;
+
+    public List<DnsMessageInvalidReason> validate() {
+        if (validationResultCache != null) {
+            return validationResultCache;
+        }
+
+        List<DnsMessageInvalidReason> result = new ArrayList<>();
+
+        List<Record<CNAME>> cnameRrs = filterAnswerSectionBy(CNAME.class);
+        Set<DnsName> dnsNamesWithCnames = new HashSet<>(cnameRrs.size());
+
+        // Every name in the answer section must have at most one CNAME RR.
+        for (Record<CNAME> cnameRr : cnameRrs) {
+            boolean isNew = dnsNamesWithCnames.add(cnameRr.name);
+            if (!isNew) {
+                
+            }
+            // TODO
+        }
+
+        // If there is a CNAME RR for a name, then there must not be any other records.
+        for (DnsName dnsNameWithCname : dnsNamesWithCnames) {
+            for (Record<? extends Data> answer : Record.filter(dnsNameWithCname, answerSection)) {
+                if (answer.payloadData.getType() != TYPE.CNAME) {
+                    continue;
+                }
+                // TODO A DNSName with a CNAME RR has also a record of a differetnt type then CNAME.
+            }
+        }
+
+        validationResultCache = Collections.unmodifiableList(result);
+        return validationResultCache;
+    }
+
+    public abstract static class DnsMessageInvalidReason {
+
+        /**
+         * There are multiple {@link org.minidns.record.CNAME} resource records for the same name.
+         *
+         */
+        public static final class MultiCnameOfSameDnsName extends DnsMessageInvalidReason {
+            
+        }
+    }
 }
