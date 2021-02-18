@@ -25,6 +25,7 @@ import org.minidns.dnsserverlookup.DnsServerLookupMechanism;
 import org.minidns.dnsserverlookup.UnixUsingEtcResolvConf;
 import org.minidns.record.CNAME;
 import org.minidns.record.Record;
+import org.minidns.util.Async;
 import org.minidns.util.CollectionsUtil;
 import org.minidns.util.InetAddressUtil;
 import org.minidns.util.MultipleIoException;
@@ -174,7 +175,9 @@ public class DnsClient extends AbstractDnsClient {
                 continue;
             }
 
-            dnsQueryResult = maybeChaseCname(q, dnsQueryResult, this::query);
+            if (nextCnameQuestion(dnsQueryResult) != null) {
+                dnsQueryResult = chaseCname(q, dnsQueryResult);
+            }
 
             if (disableResultFilter) {
                 return dnsQueryResult;
@@ -251,18 +254,27 @@ public class DnsClient extends AbstractDnsClient {
 
             MiniDnsFuture<DnsQueryResult, IOException> f = queryAsync(q, forwardDnsServer);
             f.onSuccess(result -> {
-                try {
-                    // TODO: The null here is exactly the problem. As we can not chase the cname
-                    // blocking in a future's success callback.
-                    result = maybeChaseCname(q, result, null);
-                } catch (IOException exception) {
-                    exceptions.add(exception);
-                    if (exceptions.size() == dnsServerAddresses.size()) {
-                        future.setException(MultipleIoException.toIOException(exceptions));
-                    }
-                    return;
+                if (nextCnameQuestion(result) == null) {
+                    future.setResult(result);
+                } else {
+                    // Since we are in a Future's onSuccess() callback, we have to perform the CNAME
+                    // chasing in a new thread.
+                    Async.go(() -> {
+                        DnsQueryResult cnameChasedResult;
+                        try {
+                            // TODO: The null here is exactly the problem. As we can not chase the cname
+                            // blocking in a future's success callback.
+                            cnameChasedResult = chaseCname(q, result);
+                        } catch (IOException exception) {
+                            exceptions.add(exception);
+                            if (exceptions.size() == dnsServerAddresses.size()) {
+                                future.setException(MultipleIoException.toIOException(exceptions));
+                            }
+                            return;
+                        }
+                        future.setResult(cnameChasedResult);
+                    });
                 }
-                future.setResult(result);
             });
             f.onError(exception -> {
                 exceptions.add(exception);
@@ -484,20 +496,25 @@ public class DnsClient extends AbstractDnsClient {
         return CollectionsUtil.getRandomFrom(STATIC_IPV6_DNS_SERVERS, insecureRandom);
     }
 
-    private DnsQueryResult maybeChaseCname(DnsMessage question, DnsQueryResult initialResult, DoQuery doQuery) throws IOException {
-        DnsMessage initialResponse = initialResult.response;
-        if (initialResponse.responseCode != RESPONSE_CODE.NO_ERROR) {
-            return initialResult;
+    private static Question nextCnameQuestion(DnsQueryResult result) {
+        DnsMessage response = result.response;
+        if (response.responseCode != RESPONSE_CODE.NO_ERROR) {
+            return null;
         }
 
-        Record<CNAME> cname = initialResponse.maybeGetCnameAnswerFor(question.getQuestion());
+        Question question = result.query.getQuestion();
+        Record<CNAME> cname = response.maybeGetCnameAnswerFor(question);
         if (cname == null) {
-            // No need to for CNAME chasing.
-            return initialResult;
+            return null;
         }
 
+        Question nextCnameQuestion =  new Question(cname.payloadData.target, question);
+        return nextCnameQuestion;
+    }
+
+    private DnsQueryResult chaseCname(DnsMessage question, DnsQueryResult initialResult) throws IOException {
         List<CnameChainLink> cnameChain = new ArrayList<>(4);
-        chaseCnameRecursive(question, initialResult, cnameChain, doQuery);
+        chaseCnameRecursive(question, initialResult, cnameChain);
 
         return new CnameChainDnsQueryResult(question, cnameChain);
     }
@@ -505,19 +522,12 @@ public class DnsClient extends AbstractDnsClient {
     private static final int MAX_CNAME_CHAIN_LENGTH = 10;
 
     private void chaseCnameRecursive(DnsMessage currentQuery, DnsQueryResult currentResult,
-            List<CnameChainLink> cnameChain, DoQuery doQuery) throws IOException {
+            List<CnameChainLink> cnameChain) throws IOException {
         CnameChainLink.append(currentQuery, currentResult, cnameChain);
 
-        final DnsMessage currentResponse = currentResult.response;
-        if (currentResponse.responseCode != RESPONSE_CODE.NO_ERROR) {
-            // TODO: abort try other server?
-            return;
-        }
-
-        final Question currentQuestion = currentQuery.getQuestion();
-        final Record<CNAME> cname = currentResponse.maybeGetCnameAnswerFor(currentQuery.getQuestion());
-        if (cname == null) {
-            // either finished chasing, or no need to chase.
+        Question nextCnameQuestion = nextCnameQuestion(currentResult);
+        if (nextCnameQuestion == null) {
+            // We are done chasing.
             return;
         }
 
@@ -528,15 +538,11 @@ public class DnsClient extends AbstractDnsClient {
         // TODO: Check for CNAME loops
 
         // Prepare the new Question
-        Question newQuestion = new Question(cname.payloadData.target, currentQuestion);
-        DnsMessage.Builder newQueryBuilder = currentQuery.asBuilder().setQuestion(newQuestion);
+        DnsMessage.Builder newQueryBuilder = currentQuery.asBuilder().setQuestion(nextCnameQuestion);
 
-        DnsQueryResult newResult = doQuery.doQuery(newQueryBuilder);
+        DnsQueryResult newResult = query(newQueryBuilder);
 
-        chaseCnameRecursive(newResult.query, newResult, cnameChain, doQuery);
+        chaseCnameRecursive(newResult.query, newResult, cnameChain);
     }
 
-    private interface DoQuery {
-        DnsQueryResult doQuery(DnsMessage.Builder query) throws IOException;
-    }
 }
