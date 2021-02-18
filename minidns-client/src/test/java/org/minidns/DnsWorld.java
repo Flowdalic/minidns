@@ -309,7 +309,9 @@ public class DnsWorld extends AbstractDnsDataSource {
                 } else {
                     world.addPreparedResponse(new AddressedAnswerResponse(zone.address, request, response));
                 }
-                if (rrSet.type == TYPE.NS) {
+
+                switch (rrSet.type) {
+                case NS:
                     DnsMessage.Builder hintsResp = DnsMessage.builder();
                     hintsResp.setNameserverRecords(rrSet.records);
                     hintsResp.setAdditionalResourceRecords(response.additionalSection);
@@ -319,6 +321,12 @@ public class DnsWorld extends AbstractDnsDataSource {
                     } else {
                         world.addPreparedResponse(new AddressedHintsResponse(zone.address, rrSet.name, hintsResponse));
                     }
+                    break;
+                case CNAME:
+                    // TODO: Create CnameResponse which matches for all queries for this name.
+                    break;
+                default:
+                    break;
                 }
             }
         }
