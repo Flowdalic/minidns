@@ -109,6 +109,7 @@ public class DnssecClient extends ReliableDnsClient {
     private DnssecQueryResult performVerification(DnsQueryResult dnsQueryResult) throws IOException {
         if (dnsQueryResult == null) return null;
 
+        // TODO: CHASE CNAME Perform cname chain verification.
         DnsMessage dnsMessage = dnsQueryResult.response;
         DnsMessage.Builder messageBuilder = dnsMessage.asBuilder();
 

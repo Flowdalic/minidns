@@ -109,6 +109,10 @@ public class Question {
         this(DnsName.from(name), type);
     }
 
+    public Question(DnsName name, Question initialQuestion) {
+        this(name, initialQuestion.type, initialQuestion.clazz, initialQuestion.unicastQuery);
+    }
+
     /**
      * Parse a byte array and rebuild the dns question from it.
      * @param dis The input stream.
