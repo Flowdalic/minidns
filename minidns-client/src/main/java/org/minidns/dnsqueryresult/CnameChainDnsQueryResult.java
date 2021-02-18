@@ -11,6 +11,7 @@
 package org.minidns.dnsqueryresult;
 
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import org.minidns.dnsmessage.DnsMessage;
@@ -26,12 +27,22 @@ public class CnameChainDnsQueryResult extends DnsQueryResult {
     }
 
     private static QueryMethod deduceQueryMethod(List<CnameChainLink> cnameChain) {
-        return null;
+        Iterator<CnameChainLink> it = cnameChain.iterator();
+        QueryMethod deducedMethod = it.next().dnsQueryResult.queryMethod;
+
+        while (it.hasNext()) {
+            QueryMethod queryMethod = it.next().dnsQueryResult.queryMethod;
+            if (queryMethod != deducedMethod) {
+                return QueryMethod.various;
+            }
+        }
+
+        return deducedMethod;
     }
 
     private static DnsMessage deduceResponse(List<CnameChainLink> cnameChain) {
         // TODO: In case of a cname chain there is no single response. Shall we
         // synthesize one? Use the first or last response in the chain?
-        return null;
+        return cnameChain.get(cnameChain.size() - 1).dnsQueryResult.response;
     }
 }

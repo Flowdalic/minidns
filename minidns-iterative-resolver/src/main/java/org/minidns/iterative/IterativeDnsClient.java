@@ -75,9 +75,9 @@ public class IterativeDnsClient extends AbstractDnsClient {
      * @throws IOException if an IO error occurs.
      */
     @Override
-    protected DnsQueryResult query(DnsMessage.Builder queryBuilder) throws IOException {
+    protected DnsQueryResult query(DnsMessage.Builder queryBuilder, boolean chaseCname) throws IOException {
         DnsMessage q = queryBuilder.build();
-        ResolutionState resolutionState = new ResolutionState(this);
+        ResolutionState resolutionState = new ResolutionState(this, chaseCname);
         DnsQueryResult result = queryRecursive(resolutionState, q);
         return result;
     }
@@ -197,15 +197,18 @@ public class IterativeDnsClient extends AbstractDnsClient {
         return null;
     }
 
-    private DnsQueryResult queryRecursive(ResolutionState resolutionState, DnsMessage q, InetAddress address, DnsName authoritativeZone) throws IOException {
+    private DnsQueryResult queryRecursive(ResolutionState resolutionState, DnsMessage q, InetAddress address,
+            DnsName authoritativeZone) throws IOException {
         resolutionState.recurse(address, q);
 
         DnsQueryResult dnsQueryResult = query(q, address);
 
         DnsMessage resMessage = dnsQueryResult.response;
         if (resMessage.authoritativeAnswer) {
-            Record<CNAME> cname = resMessage.maybeGetCnameAnswerFor(q.getQuestion());
-            // TODO: Check if CNAME, if so, then chase.
+            if (resolutionState.chaseCname && nextCnameQuestion(dnsQueryResult) != null) {
+                // Perform CNAME chasing.
+                dnsQueryResult = chaseCname(q, dnsQueryResult);
+            }
             return dnsQueryResult;
         }
 

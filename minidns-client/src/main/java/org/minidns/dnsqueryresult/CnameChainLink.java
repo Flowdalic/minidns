@@ -15,7 +15,7 @@ import java.util.List;
 import org.minidns.dnsmessage.DnsMessage;
 import org.minidns.dnsname.DnsName;
 
-public class CnameChainLink {
+public final class CnameChainLink {
     public final DnsName target;
     public final DnsMessage query;
     public final DnsQueryResult dnsQueryResult;

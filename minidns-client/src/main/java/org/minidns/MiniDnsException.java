@@ -121,7 +121,7 @@ public abstract class MiniDnsException extends IOException {
         }
     }
 
-    private static abstract class AbstractCname extends MiniDnsException {
+    private abstract static class AbstractCname extends MiniDnsException {
 
         /**
          * 
@@ -141,7 +141,7 @@ public abstract class MiniDnsException extends IOException {
         }
     }
 
-    public static class CnameChainToLong extends AbstractCname {
+    public static final class CnameChainToLong extends AbstractCname {
 
         /**
          * 
@@ -162,7 +162,7 @@ public abstract class MiniDnsException extends IOException {
 
     }
 
-    public static class CnameLoop extends AbstractCname {
+    public static final class CnameLoop extends AbstractCname {
 
         /**
          * 

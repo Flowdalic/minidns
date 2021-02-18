@@ -14,17 +14,11 @@ import org.minidns.MiniDnsException.ErrorResponseException;
 import org.minidns.MiniDnsException.NoQueryPossibleException;
 import org.minidns.MiniDnsFuture.InternalMiniDnsFuture;
 import org.minidns.dnsmessage.DnsMessage;
-import org.minidns.dnsmessage.DnsMessage.RESPONSE_CODE;
-import org.minidns.dnsmessage.Question;
-import org.minidns.dnsqueryresult.CnameChainDnsQueryResult;
-import org.minidns.dnsqueryresult.CnameChainLink;
 import org.minidns.dnsqueryresult.DnsQueryResult;
 import org.minidns.dnsserverlookup.AndroidUsingExec;
 import org.minidns.dnsserverlookup.AndroidUsingReflection;
 import org.minidns.dnsserverlookup.DnsServerLookupMechanism;
 import org.minidns.dnsserverlookup.UnixUsingEtcResolvConf;
-import org.minidns.record.CNAME;
-import org.minidns.record.Record;
 import org.minidns.util.Async;
 import org.minidns.util.CollectionsUtil;
 import org.minidns.util.InetAddressUtil;
@@ -137,15 +131,7 @@ public class DnsClient extends AbstractDnsClient {
     }
 
     @Override
-    public DnsQueryResult query(DnsMessage.Builder queryBuilder) throws IOException {
-        return query(queryBuilder, true);
-    }
-
-    private DnsQueryResult queryNotChasingCnames(DnsMessage.Builder queryBuilder) throws IOException {
-        return query(queryBuilder, false);
-    }
-
-    private DnsQueryResult query(DnsMessage.Builder queryBuilder, boolean chaseCname) throws IOException {
+    public DnsQueryResult query(DnsMessage.Builder queryBuilder, boolean chaseCname) throws IOException {
         DnsMessage q = newQuestion(queryBuilder).build();
         // While this query method does in fact re-use query(Question, String)
         // we still do a cache lookup here in order to avoid unnecessary
@@ -220,7 +206,8 @@ public class DnsClient extends AbstractDnsClient {
     }
 
     @Override
-    protected MiniDnsFuture<DnsQueryResult, IOException> queryAsync(DnsMessage.Builder queryBuilder) {
+    protected MiniDnsFuture<DnsQueryResult, IOException> queryAsync(DnsMessage.Builder queryBuilder,
+            boolean chaseCname) {
         DnsMessage q = newQuestion(queryBuilder).build();
         // While this query method does in fact re-use query(Question, String)
         // we still do a cache lookup here in order to avoid unnecessary
@@ -259,7 +246,7 @@ public class DnsClient extends AbstractDnsClient {
 
             MiniDnsFuture<DnsQueryResult, IOException> f = queryAsync(q, forwardDnsServer);
             f.onSuccess(result -> {
-                if (nextCnameQuestion(result) == null) {
+                if (chaseCname && nextCnameQuestion(result) == null) {
                     future.setResult(result);
                 } else {
                     // Since we are in a Future's onSuccess() callback, we have to perform the CNAME
@@ -499,68 +486,6 @@ public class DnsClient extends AbstractDnsClient {
 
     public InetAddress getRandomHarcodedIpv6DnsServer() {
         return CollectionsUtil.getRandomFrom(STATIC_IPV6_DNS_SERVERS, insecureRandom);
-    }
-
-    private static Question nextCnameQuestion(DnsQueryResult result) {
-        DnsMessage response = result.response;
-        if (response.responseCode != RESPONSE_CODE.NO_ERROR) {
-            return null;
-        }
-
-        Question question = result.query.getQuestion();
-        Record<CNAME> cname = response.maybeGetCnameAnswerFor(question);
-        if (cname == null) {
-            return null;
-        }
-
-        Question nextCnameQuestion =  new Question(cname.payloadData.target, question);
-        return nextCnameQuestion;
-    }
-
-    private DnsQueryResult chaseCname(DnsMessage question, DnsQueryResult initialResult) throws IOException {
-        List<CnameChainLink> cnameChain = new ArrayList<>(4);
-        chaseCnameRecursive(question, initialResult, cnameChain);
-
-        return new CnameChainDnsQueryResult(question, cnameChain);
-    }
-
-    private static final int MAX_CNAME_CHAIN_LENGTH = 10;
-
-    private void chaseCnameRecursive(DnsMessage currentQuery, DnsQueryResult currentResult,
-            List<CnameChainLink> cnameChain) throws IOException {
-        CnameChainLink.createAndAppend(cnameChain, currentQuery, currentResult);
-
-        Question nextCnameQuestion = nextCnameQuestion(currentResult);
-        if (nextCnameQuestion == null) {
-            // We are done chasing.
-            return;
-        }
-
-        if (cnameChain.size() >= MAX_CNAME_CHAIN_LENGTH) {
-            throw MiniDnsException.CnameChainToLong.create(cnameChain, currentResult);
-        }
-
-        // Check for CNAME loops.
-        for (int linkNumber = 0; linkNumber < cnameChain.size(); linkNumber++) {
-            CnameChainLink link = cnameChain.get(linkNumber);
-            Question linkQuestion = link.query.getQuestion();
-            if (linkQuestion.equals(nextCnameQuestion)) {
-                throw MiniDnsException.CnameLoop.create(linkNumber, cnameChain, currentResult);
-            }
-        }
-
-        // Prepare the new Question
-        DnsMessage.Builder newQueryBuilder = currentQuery.asBuilder().setQuestion(nextCnameQuestion);
-
-        DnsQueryResult newResult = queryNotChasingCnames(newQueryBuilder);
-
-        CnameChainDnsQueryResult newResultCnameChain;
-        if ((newResultCnameChain = newResult.asCnameChainDnsQueryResultIfPossible()) != null) {
-            cnameChain.addAll(newResultCnameChain.cnameChain);
-            return;
-        }
-
-        chaseCnameRecursive(newResult.query, newResult, cnameChain);
     }
 
 }

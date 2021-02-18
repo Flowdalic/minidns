@@ -14,10 +14,14 @@ import org.minidns.MiniDnsFuture.InternalMiniDnsFuture;
 import org.minidns.cache.LruCache;
 import org.minidns.dnsmessage.DnsMessage;
 import org.minidns.dnsmessage.Question;
+import org.minidns.dnsmessage.DnsMessage.RESPONSE_CODE;
 import org.minidns.dnsname.DnsName;
+import org.minidns.dnsqueryresult.CnameChainDnsQueryResult;
+import org.minidns.dnsqueryresult.CnameChainLink;
 import org.minidns.dnsqueryresult.DnsQueryResult;
 import org.minidns.record.A;
 import org.minidns.record.AAAA;
+import org.minidns.record.CNAME;
 import org.minidns.record.Data;
 import org.minidns.record.NS;
 import org.minidns.record.Record;
@@ -30,8 +34,10 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.logging.Level;
@@ -188,14 +194,23 @@ public abstract class AbstractDnsClient {
         return query(query);
     }
 
+    public final DnsQueryResult query(DnsMessage.Builder queryBuilder) throws IOException {
+        return query(queryBuilder, true);
+    }
+
+    public final DnsQueryResult queryNotChasingCnames(DnsMessage.Builder queryBuilder) throws IOException {
+        return query(queryBuilder, false);
+    }
+
     /**
      * Send a query request to the DNS system.
      *
      * @param query The query to send to the server.
+     * @param chaseCname if <code>true</code> then chase CNAMEs.
      * @return The response (or null).
      * @throws IOException if an IO error occurs.
      */
-    protected abstract DnsQueryResult query(DnsMessage.Builder query) throws IOException;
+    protected abstract DnsQueryResult query(DnsMessage.Builder query, boolean chaseCname) throws IOException;
 
     public final MiniDnsFuture<DnsQueryResult, IOException> queryAsync(CharSequence name, TYPE type) {
         Question q = new Question(name, type, CLASS.IN);
@@ -207,6 +222,10 @@ public abstract class AbstractDnsClient {
         return queryAsync(query);
     }
 
+    public final MiniDnsFuture<DnsQueryResult, IOException> queryAsync(DnsMessage.Builder query) {
+        return queryAsync(query, true);
+    }
+
     /**
      * Default implementation of an asynchronous DNS query which just wraps the synchronous case.
      * <p>
@@ -214,13 +233,14 @@ public abstract class AbstractDnsClient {
      * </p>
      *
      * @param query the query.
+     * @param chaseCname if <code>true</code> then chase CNAMEs.
      * @return a future for this query.
      */
-    protected MiniDnsFuture<DnsQueryResult, IOException> queryAsync(DnsMessage.Builder query) {
+    protected MiniDnsFuture<DnsQueryResult, IOException> queryAsync(DnsMessage.Builder query, boolean chaseCname) {
         InternalMiniDnsFuture<DnsQueryResult, IOException> future = new InternalMiniDnsFuture<>();
         DnsQueryResult result;
         try {
-            result = query(query);
+            result = query(query, chaseCname);
         } catch (IOException e) {
             future.setException(e);
             return future;
@@ -473,5 +493,67 @@ public abstract class AbstractDnsClient {
 
     public Set<AAAA> getCachedIPv6NameserverAddressesFor(DnsName dnsName) {
         return getCachedIPNameserverAddressesFor(dnsName, TYPE.AAAA);
+    }
+
+    protected static Question nextCnameQuestion(DnsQueryResult result) {
+        DnsMessage response = result.response;
+        if (response.responseCode != RESPONSE_CODE.NO_ERROR) {
+            return null;
+        }
+
+        Question question = result.query.getQuestion();
+        Record<CNAME> cname = response.maybeGetCnameAnswerFor(question);
+        if (cname == null) {
+            return null;
+        }
+
+        Question nextCnameQuestion =  new Question(cname.payloadData.target, question);
+        return nextCnameQuestion;
+    }
+
+    protected DnsQueryResult chaseCname(DnsMessage question, DnsQueryResult initialResult) throws IOException {
+        List<CnameChainLink> cnameChain = new ArrayList<>(4);
+        chaseCnameRecursive(question, initialResult, cnameChain);
+
+        return new CnameChainDnsQueryResult(question, cnameChain);
+    }
+
+    private static final int MAX_CNAME_CHAIN_LENGTH = 10;
+
+    private void chaseCnameRecursive(DnsMessage currentQuery, DnsQueryResult currentResult,
+            List<CnameChainLink> cnameChain) throws IOException {
+        CnameChainLink.createAndAppend(cnameChain, currentQuery, currentResult);
+
+        Question nextCnameQuestion = nextCnameQuestion(currentResult);
+        if (nextCnameQuestion == null) {
+            // We are done chasing.
+            return;
+        }
+
+        if (cnameChain.size() >= MAX_CNAME_CHAIN_LENGTH) {
+            throw MiniDnsException.CnameChainToLong.create(cnameChain, currentResult);
+        }
+
+        // Check for CNAME loops.
+        for (int linkNumber = 0; linkNumber < cnameChain.size(); linkNumber++) {
+            CnameChainLink link = cnameChain.get(linkNumber);
+            Question linkQuestion = link.query.getQuestion();
+            if (linkQuestion.equals(nextCnameQuestion)) {
+                throw MiniDnsException.CnameLoop.create(linkNumber, cnameChain, currentResult);
+            }
+        }
+
+        // Prepare the new Question
+        DnsMessage.Builder newQueryBuilder = currentQuery.asBuilder().setQuestion(nextCnameQuestion);
+
+        DnsQueryResult newResult = queryNotChasingCnames(newQueryBuilder);
+
+        CnameChainDnsQueryResult newResultCnameChain;
+        if ((newResultCnameChain = newResult.asCnameChainDnsQueryResultIfPossible()) != null) {
+            cnameChain.addAll(newResultCnameChain.cnameChain);
+            return;
+        }
+
+        chaseCnameRecursive(newResult.query, newResult, cnameChain);
     }
 }

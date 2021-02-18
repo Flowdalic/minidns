@@ -88,7 +88,7 @@ public class ReliableDnsClient extends AbstractDnsClient {
     }
 
     @Override
-    protected DnsQueryResult query(DnsMessage.Builder q) throws IOException {
+    protected DnsQueryResult query(DnsMessage.Builder q, boolean chaseCname) throws IOException {
         DnsQueryResult dnsMessage = null;
         String unacceptableReason = null;
         List<IOException> ioExceptions = new LinkedList<>();
@@ -96,7 +96,7 @@ public class ReliableDnsClient extends AbstractDnsClient {
         if (mode != Mode.iterativeOnly) {
             // Try a recursive query.
             try {
-                dnsMessage = dnsClient.query(q);
+                dnsMessage = dnsClient.query(q, chaseCname);
                 if (dnsMessage != null) {
                     unacceptableReason = isResponseAcceptable(dnsMessage.response);
                     if (unacceptableReason == null) {

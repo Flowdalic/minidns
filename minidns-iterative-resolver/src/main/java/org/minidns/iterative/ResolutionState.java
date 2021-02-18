@@ -24,10 +24,14 @@ public class ResolutionState {
 
     private final IterativeDnsClient recursiveDnsClient;
     private final HashMap<InetAddress, Set<Question>> map = new HashMap<>();
+
+    final boolean chaseCname;
+
     private int steps;
 
-    ResolutionState(IterativeDnsClient recursiveDnsClient) {
+    ResolutionState(IterativeDnsClient recursiveDnsClient, boolean chaseCname) {
         this.recursiveDnsClient = recursiveDnsClient;
+        this.chaseCname = chaseCname;
     }
 
     void recurse(InetAddress address, DnsMessage query) throws LoopDetected, MaxIterativeStepsReached {

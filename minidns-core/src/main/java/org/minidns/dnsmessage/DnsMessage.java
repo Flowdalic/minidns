@@ -1318,7 +1318,6 @@ public class DnsMessage {
         for (Record<CNAME> cnameRr : cnameRrs) {
             boolean isNew = dnsNamesWithCnames.add(cnameRr.name);
             if (!isNew) {
-                
             }
             // TODO
         }
@@ -1344,7 +1343,6 @@ public class DnsMessage {
          *
          */
         public static final class MultiCnameOfSameDnsName extends DnsMessageInvalidReason {
-            
         }
     }
 }

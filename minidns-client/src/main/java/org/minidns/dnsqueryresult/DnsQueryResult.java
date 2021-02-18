@@ -12,7 +12,6 @@ package org.minidns.dnsqueryresult;
 
 import org.minidns.dnsmessage.DnsMessage;
 import org.minidns.dnsmessage.DnsMessage.RESPONSE_CODE;
-import org.minidns.dnsmessage.Question;
 
 public abstract class DnsQueryResult {
 
@@ -23,12 +22,11 @@ public abstract class DnsQueryResult {
         asyncTcp,
         cachedDirect,
         cachedSynthesized,
+        various,
         testWorld,
     }
 
     public final QueryMethod queryMethod;
-
-    public final Question question;
 
     public final DnsMessage query;
 
@@ -40,7 +38,6 @@ public abstract class DnsQueryResult {
         assert response != null;
 
         this.queryMethod = queryMethod;
-        this.question = query.getQuestion();
         this.query = query;
         this.response = response;
     }
