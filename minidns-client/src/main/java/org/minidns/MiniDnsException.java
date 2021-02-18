@@ -11,8 +11,11 @@
 package org.minidns;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 
 import org.minidns.dnsmessage.DnsMessage;
+import org.minidns.dnsqueryresult.CnameChainLink;
 import org.minidns.dnsqueryresult.DnsQueryResult;
 
 public abstract class MiniDnsException extends IOException {
@@ -116,5 +119,71 @@ public abstract class MiniDnsException extends IOException {
         public DnsMessage getRequest() {
             return request;
         }
+    }
+
+    private static abstract class AbstractCname extends MiniDnsException {
+
+        /**
+         * 
+         */
+        private static final long serialVersionUID = 1L;
+
+        public final DnsMessage initialQuery;
+        public final List<CnameChainLink> cnameChain;
+        public final DnsQueryResult currentResult;
+
+        protected AbstractCname(String message, DnsMessage initialQuery, List<CnameChainLink> cnameChain,
+                DnsQueryResult currentResult) {
+            super(message);
+            this.initialQuery = initialQuery;
+            this.cnameChain = Collections.unmodifiableList(cnameChain);
+            this.currentResult = currentResult;
+        }
+    }
+
+    public static class CnameChainToLong extends AbstractCname {
+
+        /**
+         * 
+         */
+        private static final long serialVersionUID = 1L;
+
+        private CnameChainToLong(String message, DnsMessage initialQuery, List<CnameChainLink> cnameChain,
+                DnsQueryResult currentResult) {
+            super(message, initialQuery, cnameChain, currentResult);
+        }
+
+        public static CnameChainToLong create(List<CnameChainLink> cnameChain, DnsQueryResult currentResult) {
+            DnsMessage initialQuery = cnameChain.get(0).query;
+            String message = "The CNAME chain for " + initialQuery.getQuestion()
+                    + " is to long. It currently is " + cnameChain.size() + "links long";
+            return new CnameChainToLong(message, initialQuery, cnameChain, currentResult);
+        }
+
+    }
+
+    public static class CnameLoop extends AbstractCname {
+
+        /**
+         * 
+         */
+        private static final long serialVersionUID = 1L;
+
+        public final int loopingLink;
+
+        private CnameLoop(String message, int loopingLink, DnsMessage initialQuery, List<CnameChainLink> cnameChain,
+                DnsQueryResult currentResult) {
+            super(message, initialQuery, cnameChain, currentResult);
+            this.loopingLink = loopingLink;
+        }
+
+        public static CnameLoop create(int loopingLink, List<CnameChainLink> cnameChain, DnsQueryResult currentResult) {
+            DnsMessage initialQuery = cnameChain.get(0).query;
+            // TODO: Improve message to include the actual loop.
+            String message = "The CNAME chain for " + initialQuery.getQuestion()
+                    + " contains a loop";
+            return new CnameLoop(message, loopingLink, initialQuery, cnameChain, currentResult);
+        }
+
     }
 }

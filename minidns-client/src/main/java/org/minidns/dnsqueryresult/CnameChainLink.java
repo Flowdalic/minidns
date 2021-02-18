@@ -17,17 +17,17 @@ import org.minidns.dnsname.DnsName;
 
 public class CnameChainLink {
     public final DnsName target;
-    public final DnsMessage question;
+    public final DnsMessage query;
     public final DnsQueryResult dnsQueryResult;
 
-    private CnameChainLink(DnsMessage question, DnsQueryResult dnsQueryResult) {
-        this.target = question.getQuestion().name;
-        this.question = question;
+    private CnameChainLink(DnsMessage query, DnsQueryResult dnsQueryResult) {
+        this.target = query.getQuestion().name;
+        this.query = query;
         this.dnsQueryResult = dnsQueryResult;
     }
 
-    public static void append(DnsMessage question, DnsQueryResult dnsQueryResult, List<CnameChainLink> cnameChain) {
-        CnameChainLink link = new CnameChainLink(question, dnsQueryResult);
+    public static void createAndAppend(List<CnameChainLink> cnameChain, DnsMessage query, DnsQueryResult dnsQueryResult) {
+        CnameChainLink link = new CnameChainLink(query, dnsQueryResult);
         cnameChain.add(link);
     }
 }

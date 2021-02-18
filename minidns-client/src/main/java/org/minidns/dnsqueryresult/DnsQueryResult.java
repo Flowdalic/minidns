@@ -45,6 +45,13 @@ public abstract class DnsQueryResult {
         this.response = response;
     }
 
+    public CnameChainDnsQueryResult asCnameChainDnsQueryResultIfPossible() {
+        if (this instanceof CnameChainDnsQueryResult) {
+            return (CnameChainDnsQueryResult) this;
+        }
+        return null;
+    }
+
     @Override
     public String toString() {
         return response.toString();

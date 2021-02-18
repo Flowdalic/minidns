@@ -138,6 +138,14 @@ public class DnsClient extends AbstractDnsClient {
 
     @Override
     public DnsQueryResult query(DnsMessage.Builder queryBuilder) throws IOException {
+        return query(queryBuilder, true);
+    }
+
+    private DnsQueryResult queryNotChasingCnames(DnsMessage.Builder queryBuilder) throws IOException {
+        return query(queryBuilder, false);
+    }
+
+    private DnsQueryResult query(DnsMessage.Builder queryBuilder, boolean chaseCname) throws IOException {
         DnsMessage q = newQuestion(queryBuilder).build();
         // While this query method does in fact re-use query(Question, String)
         // we still do a cache lookup here in order to avoid unnecessary
@@ -165,8 +173,7 @@ public class DnsClient extends AbstractDnsClient {
                 continue;
             }
 
-            DnsMessage responseMessage = dnsQueryResult.response;
-            if (!responseMessage.recursionAvailable) {
+            if (!dnsQueryResult.response.recursionAvailable) {
                 boolean newRaServer = nonRaServers.add(dns);
                 if (newRaServer) {
                     LOGGER.warning("The DNS server " + dns
@@ -175,7 +182,8 @@ public class DnsClient extends AbstractDnsClient {
                 continue;
             }
 
-            if (nextCnameQuestion(dnsQueryResult) != null) {
+            if (chaseCname && nextCnameQuestion(dnsQueryResult) != null) {
+                // Perform CNAME chasing.
                 dnsQueryResult = chaseCname(q, dnsQueryResult);
             }
 
@@ -183,12 +191,9 @@ public class DnsClient extends AbstractDnsClient {
                 return dnsQueryResult;
             }
 
+            final DnsMessage responseMessage = dnsQueryResult.response;
             switch (responseMessage.responseCode) {
             case NO_ERROR:
-                Record<CNAME> cname = responseMessage.maybeGetCnameAnswerFor(q.getQuestion());
-                if (cname != null) {
-                    // TODO: if is CNAME *and* if CNAME chain not fully resolved, then begin chasing.
-                }
             case NX_DOMAIN:
                 break;
             default:
@@ -523,7 +528,7 @@ public class DnsClient extends AbstractDnsClient {
 
     private void chaseCnameRecursive(DnsMessage currentQuery, DnsQueryResult currentResult,
             List<CnameChainLink> cnameChain) throws IOException {
-        CnameChainLink.append(currentQuery, currentResult, cnameChain);
+        CnameChainLink.createAndAppend(cnameChain, currentQuery, currentResult);
 
         Question nextCnameQuestion = nextCnameQuestion(currentResult);
         if (nextCnameQuestion == null) {
@@ -532,15 +537,28 @@ public class DnsClient extends AbstractDnsClient {
         }
 
         if (cnameChain.size() >= MAX_CNAME_CHAIN_LENGTH) {
-            // abort cause to long.
+            throw MiniDnsException.CnameChainToLong.create(cnameChain, currentResult);
         }
 
-        // TODO: Check for CNAME loops
+        // Check for CNAME loops.
+        for (int linkNumber = 0; linkNumber < cnameChain.size(); linkNumber++) {
+            CnameChainLink link = cnameChain.get(linkNumber);
+            Question linkQuestion = link.query.getQuestion();
+            if (linkQuestion.equals(nextCnameQuestion)) {
+                throw MiniDnsException.CnameLoop.create(linkNumber, cnameChain, currentResult);
+            }
+        }
 
         // Prepare the new Question
         DnsMessage.Builder newQueryBuilder = currentQuery.asBuilder().setQuestion(nextCnameQuestion);
 
-        DnsQueryResult newResult = query(newQueryBuilder);
+        DnsQueryResult newResult = queryNotChasingCnames(newQueryBuilder);
+
+        CnameChainDnsQueryResult newResultCnameChain;
+        if ((newResultCnameChain = newResult.asCnameChainDnsQueryResultIfPossible()) != null) {
+            cnameChain.addAll(newResultCnameChain.cnameChain);
+            return;
+        }
 
         chaseCnameRecursive(newResult.query, newResult, cnameChain);
     }
