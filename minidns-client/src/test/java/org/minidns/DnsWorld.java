@@ -69,6 +69,7 @@ public class DnsWorld extends AbstractDnsDataSource {
         for (PreparedResponse answer : answers) {
             if (answer.isResponse(message, address)) {
                 DnsMessage.Builder response = answer.getResponse().asBuilder();
+                response.setQrFlag(DnsMessage.QrFlag.response);
                 response.setId(message.id);
                 response.setQuestions(message.questions);
                 return new TestWorldDnsQueryResult(message, response.build(), answer);
@@ -296,6 +297,7 @@ public class DnsWorld extends AbstractDnsDataSource {
 
                 DnsMessage.Builder req = client.buildMessage(new Question(rrSet.name, rrSet.type, rrSet.clazz, false));
                 DnsMessage.Builder resp = DnsMessage.builder();
+                resp.setQrFlag(DnsMessage.QrFlag.response);
                 resp.setAnswers(rrSet.records);
                 resp.setAuthoritativeAnswer(true);
                 attachGlues(resp, rrSet.records, zone.records);

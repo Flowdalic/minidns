@@ -17,6 +17,7 @@ import org.minidns.record.Data;
 import org.minidns.record.OPT;
 import org.minidns.record.Record;
 import org.minidns.record.Record.TYPE;
+import org.minidns.util.Function;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -225,10 +226,43 @@ public class DnsMessage {
     /**
      * The QR flag of the DNS message header. Note that this will be <code>true</code> if the message is a
      * <b>response</b> and <code>false</code> if it is a <b>query</b>.
-     * 
+     * <p>
+     * Note: Since the semantic of this field is very confusing, it is recommend to use {@link #qrFlag} instead.
+     * </p>
+     *
      * @see <a href="https://www.ietf.org/rfc/rfc1035.txt">RFC 1035 § 4.1.1</a>
      */
     public final boolean qr;
+
+    public enum QrFlag {
+        query(false),
+        response(true),
+        ;
+
+        private boolean value;
+
+        QrFlag(boolean value) {
+            this.value = value;
+        }
+
+        public boolean isResponse() {
+            return value;
+        }
+
+        public static QrFlag from(boolean value) {
+            if (value) {
+                return QrFlag.response;
+            } else {
+                return QrFlag.query;
+            }
+        }
+    }
+
+    /**
+     * A convenience field, since the {@link #qr} field as a confusing semantic. Use
+     * of this field if prefered for readability over {@link #qr}.
+     */
+    public final QrFlag qrFlag;
 
     /**
      * True if this is a authorative response. If set, the responding nameserver is an authority for the domain name in
@@ -317,6 +351,7 @@ public class DnsMessage {
         this.responseCode = builder.responseCode;
         this.receiveTimestamp = builder.receiveTimestamp;
         this.qr = builder.query;
+        qrFlag = QrFlag.from(qr);
         this.authoritativeAnswer = builder.authoritativeAnswer;
         this.truncated = builder.truncated;
         this.recursionDesired = builder.recursionDesired;
@@ -381,14 +416,7 @@ public class DnsMessage {
             }
         }
 
-        if (!VALIDATE) {
-            return;
-        }
-
-        List<DnsMessageInvalidReason> invalidReasons = validate();
-        if (!invalidReasons.isEmpty()) {
-            throw new IllegalArgumentException("DnsMessage " + this + " is invalid because " + invalidReasons);
-        }
+        maybeValidate(IllegalArgumentException::new);
     }
 
     /**
@@ -403,6 +431,7 @@ public class DnsMessage {
         id = dis.readUnsignedShort();
         int header = dis.readUnsignedShort();
         qr = ((header >> 15) & 1) == 1;
+        qrFlag = QrFlag.from(qr);
         opcode = OPCODE.getOpcode((header >> 11) & 0xf);
         authoritativeAnswer = ((header >> 10) & 1) == 1;
         truncated = ((header >> 9) & 1) == 1;
@@ -433,6 +462,8 @@ public class DnsMessage {
             additionalSection.add(Record.parse(dis, data));
         }
         optRrPosition = getOptRrPosition(additionalSection);
+
+        maybeValidate(IOException::new);
     }
 
     /**
@@ -443,6 +474,7 @@ public class DnsMessage {
     private DnsMessage(DnsMessage message) {
         id = 0;
         qr = message.qr;
+        qrFlag = message.qrFlag;
         opcode = message.opcode;
         authoritativeAnswer = message.authoritativeAnswer;
         truncated = message.truncated;
@@ -457,6 +489,19 @@ public class DnsMessage {
         authoritySection = message.authoritySection;
         additionalSection = message.additionalSection;
         optRrPosition = message.optRrPosition;
+    }
+
+    private <E extends Exception> void maybeValidate(Function<E, String> exceptionConstructor) throws E {
+        if (!VALIDATE) {
+            return;
+        }
+
+        List<DnsMessageInvalidReason> invalidReasons = validate();
+        if (!invalidReasons.isEmpty()) {
+            String message = "DnsMessage " + this + " is invalid because " + invalidReasons;
+            E e = exceptionConstructor.apply(message);
+            throw e;
+        }
     }
 
     private static int getOptRrPosition(List<Record<? extends Data>> additionalSection) {
@@ -1015,6 +1060,10 @@ public class DnsMessage {
             return this;
         }
 
+        public Builder setQrFlag(QrFlag qrFlag) {
+            return setQrFlag(qrFlag.value);
+        }
+
         /**
          * Set the authoritative answer flag.
          *
@@ -1318,17 +1367,20 @@ public class DnsMessage {
         for (Record<CNAME> cnameRr : cnameRrs) {
             boolean isNew = dnsNamesWithCnames.add(cnameRr.name);
             if (!isNew) {
+                DnsMessageInvalidReason invalidReason = new DnsMessageInvalidReason.MultipleCnamesForSameDnsName();
+                result.add(invalidReason);
             }
-            // TODO
         }
 
         // If there is a CNAME RR for a name, then there must not be any other records.
         for (DnsName dnsNameWithCname : dnsNamesWithCnames) {
             for (Record<? extends Data> answer : Record.filter(dnsNameWithCname, answerSection)) {
-                if (answer.payloadData.getType() != TYPE.CNAME) {
+                if (answer.payloadData.getType() == TYPE.CNAME) {
                     continue;
                 }
-                // TODO A DNSName with a CNAME RR has also a record of a differetnt type then CNAME.
+
+                DnsMessageInvalidReason invalidReason = new DnsMessageInvalidReason.AdditionalRecordBesidesCname();
+                result.add(invalidReason);
             }
         }
 
@@ -1342,7 +1394,10 @@ public class DnsMessage {
          * There are multiple {@link org.minidns.record.CNAME} resource records for the same name.
          *
          */
-        public static final class MultiCnameOfSameDnsName extends DnsMessageInvalidReason {
+        private static final class MultipleCnamesForSameDnsName extends DnsMessageInvalidReason {
+        }
+
+        private static final class AdditionalRecordBesidesCname extends DnsMessageInvalidReason {
         }
     }
 }

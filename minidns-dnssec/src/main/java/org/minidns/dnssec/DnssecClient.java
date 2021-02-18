@@ -14,6 +14,8 @@ import org.minidns.DnsCache;
 import org.minidns.dnsmessage.DnsMessage;
 import org.minidns.dnsmessage.Question;
 import org.minidns.dnsname.DnsName;
+import org.minidns.dnsqueryresult.CnameChainDnsQueryResult;
+import org.minidns.dnsqueryresult.CnameChainLink;
 import org.minidns.dnsqueryresult.DnsQueryResult;
 import org.minidns.dnssec.DnssecUnverifiedReason.NoActiveSignaturesReason;
 import org.minidns.dnssec.DnssecUnverifiedReason.NoSecureEntryPointReason;
@@ -37,6 +39,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -109,18 +112,41 @@ public class DnssecClient extends ReliableDnsClient {
     private DnssecQueryResult performVerification(DnsQueryResult dnsQueryResult) throws IOException {
         if (dnsQueryResult == null) return null;
 
-        // TODO: CHASE CNAME Perform cname chain verification.
+
+
+        final List<DnsMessage> dnsMessagesToVerify;
+        {
+            CnameChainDnsQueryResult cnameChainDnsQueryResult;
+            if ((cnameChainDnsQueryResult = dnsQueryResult.asCnameChainDnsQueryResultIfPossible()) != null) {
+                dnsMessagesToVerify = new ArrayList<>(cnameChainDnsQueryResult.cnameChain.size());
+                for (CnameChainLink link : cnameChainDnsQueryResult.cnameChain) {
+                    // TODO: What if link.dnsQueryResult is already of type DnssecQueryResult?
+                    dnsMessagesToVerify.add(link.dnsQueryResult.response);
+                }
+            } else {
+                dnsMessagesToVerify = Collections.singletonList(dnsQueryResult.response);
+            }
+        }
+
+        List<Record<? extends Data>> answers = new ArrayList<>();
+        List<Record<? extends Data>> nameserverRecords = new ArrayList<>();
+        List<Record<? extends Data>> additionalResourceRecords = new ArrayList<>();
+        Set<Record<RRSIG>> signatures = new HashSet<>();
+        Set<DnssecUnverifiedReason> unverifiedReasons = new HashSet<>();
+        for (DnsMessage dnsMessage : dnsMessagesToVerify) {
+            Set<DnssecUnverifiedReason> currentUnverifiedReasons = verify(dnsMessage);
+            unverifiedReasons.addAll(currentUnverifiedReasons);
+
+            answers.addAll(dnsMessage.answerSection);
+            nameserverRecords.addAll(dnsMessage.authoritySection);
+            additionalResourceRecords.addAll(dnsMessage.additionalSection);
+        }
+
         DnsMessage dnsMessage = dnsQueryResult.response;
         DnsMessage.Builder messageBuilder = dnsMessage.asBuilder();
 
-        Set<DnssecUnverifiedReason> unverifiedReasons = verify(dnsMessage);
-
         messageBuilder.setAuthenticData(unverifiedReasons.isEmpty());
 
-        List<Record<? extends Data>> answers = dnsMessage.answerSection;
-        List<Record<? extends Data>> nameserverRecords = dnsMessage.authoritySection;
-        List<Record<? extends Data>> additionalResourceRecords = dnsMessage.additionalSection;
-        Set<Record<RRSIG>> signatures = new HashSet<>();
         Record.filter(signatures, RRSIG.class, answers);
         Record.filter(signatures, RRSIG.class, nameserverRecords);
         Record.filter(signatures, RRSIG.class, additionalResourceRecords);
@@ -146,6 +172,9 @@ public class DnssecClient extends ReliableDnsClient {
     }
 
     private Set<DnssecUnverifiedReason> verify(DnsMessage dnsMessage) throws IOException {
+        // We only verify responses, never queries.
+        assert dnsMessage.qrFlag.isResponse();
+
         if (!dnsMessage.answerSection.isEmpty()) {
             return verifyAnswer(dnsMessage);
         } else {

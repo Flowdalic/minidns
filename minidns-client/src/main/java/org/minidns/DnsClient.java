@@ -250,12 +250,10 @@ public class DnsClient extends AbstractDnsClient {
                     future.setResult(result);
                 } else {
                     // Since we are in a Future's onSuccess() callback, we have to perform the CNAME
-                    // chasing in a new thread.
+                    // chasing in a new thread, because chasing probably involves (blocking) network I/O.
                     Async.go(() -> {
                         DnsQueryResult cnameChasedResult;
                         try {
-                            // TODO: The null here is exactly the problem. As we can not chase the cname
-                            // blocking in a future's success callback.
                             cnameChasedResult = chaseCname(q, result);
                         } catch (IOException exception) {
                             exceptions.add(exception);
