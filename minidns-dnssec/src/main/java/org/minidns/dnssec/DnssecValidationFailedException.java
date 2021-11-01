@@ -12,7 +12,9 @@ package org.minidns.dnssec;
 
 import org.minidns.dnsmessage.DnsMessage;
 import org.minidns.dnsmessage.Question;
+import org.minidns.record.DNSKEY;
 import org.minidns.record.Data;
+import org.minidns.record.RRSIG;
 import org.minidns.record.Record;
 
 import java.io.IOException;
@@ -36,10 +38,6 @@ public class DnssecValidationFailedException extends IOException {
 
     public DnssecValidationFailedException(Record<? extends Data> record, String reason) {
         super("Validation of record " + record + " failed: " + reason);
-    }
-
-    public DnssecValidationFailedException(List<Record<? extends Data>> records, String reason) {
-        super("Validation of " + records.size() + " " + records.get(0).type + " record" + (records.size() > 1 ? "s" : "") + " failed: " + reason);
     }
 
     public static class DataMalformedException extends DnssecValidationFailedException {
@@ -99,6 +97,25 @@ public class DnssecValidationFailedException extends IOException {
 
         public DnsMessage getResponse() {
             return response;
+        }
+    }
+
+    public static class VerificationFailed extends DnssecValidationFailedException {
+        private final byte[] combine;
+        private final RRSIG rrsig;
+        private final DNSKEY key;
+        private final List<Record<? extends Data>> records;
+
+        private VerificationFailed(String message, byte[] combine, RRSIG rrsig, DNSKEY key, List<Record<? extends Data>> records) {
+            super(message);
+            this.combine = combine;
+            this.rrsig = rrsig;
+            this.key = key;
+            this.records = records;
+        }
+
+        public static VerificationFailed create(byte[] combine, RRSIG rrsig, DNSKEY key, List<Record<? extends Data>> records) {
+            return null;
         }
     }
 }

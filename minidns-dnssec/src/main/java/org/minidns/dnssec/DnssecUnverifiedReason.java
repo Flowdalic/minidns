@@ -172,4 +172,15 @@ public abstract class DnssecUnverifiedReason {
             return "NSEC " + record.name + " does nat match question for " + question.type + " at " + question.name;
         }
     }
+    
+    public static class VerificationFailed extends DnssecUnverifiedReason {
+        public VerificationFailed() {
+
+        }
+
+        @Override
+        public String getReasonString() {
+            return "TODO";
+        }
+    }
 }

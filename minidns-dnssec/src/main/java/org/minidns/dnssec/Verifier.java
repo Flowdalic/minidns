@@ -73,7 +73,11 @@ class Verifier {
         if (signatureVerifier.verify(combine, rrsig, key)) {
             return null;
         } else {
-            throw new DnssecValidationFailedException(records, "Signature is invalid.");
+            if (true) {
+                return new DnssecUnverifiedReason.VerificationFailed();
+            }
+            // TODO: Shouldn't this be an dnssec unverififed reason?
+            throw DnssecValidationFailedException.VerificationFailed.create(combine, rrsig, key, records);
         }
     }
 
